@@ -38,13 +38,10 @@ class DistributedRunManager:
         path,
         net,
         run_config,
-        hvd_compression,
         backward_steps=1,
         is_root=False,
         init=True,
     ):
-        import horovod.torch as hvd
-
         self.path = path
         self.net = net
         self.run_config = run_config
@@ -110,15 +107,8 @@ class DistributedRunManager:
                     if param.requires_grad:
                         net_params.append(param)
         self.optimizer = self.run_config.build_optimizer(net_params)
-        self.optimizer = hvd.DistributedOptimizer(
-            self.optimizer,
-            named_parameters=self.net.named_parameters(),
-            compression=hvd_compression,
-            backward_passes_per_step=backward_steps,
-        )
 
     """ save path and log path """
-
     @property
     def save_path(self):
         if self.__dict__.get("_save_path", None) is None:
@@ -221,16 +211,14 @@ class DistributedRunManager:
 
     # noinspection PyArgumentList
     def broadcast(self):
-        import horovod.torch as hvd
-
-        self.start_epoch = hvd.broadcast(
+        self.start_epoch = dist.broadcast(
             torch.LongTensor(1).fill_(self.start_epoch)[0], 0, name="start_epoch"
         ).item()
-        self.best_acc = hvd.broadcast(
+        self.best_acc = dist.broadcast(
             torch.Tensor(1).fill_(self.best_acc)[0], 0, name="best_acc"
         ).item()
-        hvd.broadcast_parameters(self.net.state_dict(), 0)
-        hvd.broadcast_optimizer_state(self.optimizer, 0)
+        dist.broadcast_parameters(self.net.state_dict(), 0)
+        dist.broadcast_optimizer_state(self.optimizer, 0)
 
     """ metric related """
 
